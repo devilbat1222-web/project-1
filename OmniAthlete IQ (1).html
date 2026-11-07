@@ -1,0 +1,155 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>OmniAthlete IQ</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0c1015;--sf:#151b23;--sf2:#1d2530;--bd:#2a3340;--tx:#e6ebf1;--mu:#8d9aab;--a:#34d399;--b:#38bdf8;--ok:#22c55e;--no:#ef4444;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:light){:root{--bg:#f2f4f8;--sf:#fff;--sf2:#eef1f5;--bd:#d5dbe3;--tx:#141a22;--mu:#566274}}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 'IBM Plex Sans',system-ui,sans-serif}
+h1,h2,.num{font-family:'Barlow Condensed','Arial Narrow',sans-serif;margin:0}h1{font-size:30px;letter-spacing:.5px}h2{font-size:20px;margin-bottom:8px}
+.mu{color:var(--mu);font-size:13px}header{padding:14px 16px 10px;border-bottom:1px solid var(--bd)}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;overflow-x:auto}
+button,select,input{font:inherit;color:var(--tx)}
+.tab,.btn{background:var(--sf2);border:1px solid var(--bd);border-radius:8px;padding:6px 12px;cursor:pointer}
+.tab.on{background:var(--a);border-color:var(--a);color:#07120d;font-weight:600}.btn:hover,.tab:hover{border-color:var(--a)}
+:focus-visible{outline:2px solid var(--a);outline-offset:2px}
+.wrap{max-width:1200px;margin:auto;padding:16px;display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
+@media(min-width:960px){.wrap{grid-template-columns:340px minmax(0,1fr)}}
+.card{background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:14px;margin-bottom:16px}
+input[type=text],input[type=number],select{width:100%;background:var(--sf2);border:1px solid var(--bd);border-radius:8px;padding:7px 10px}
+input[type=range]{width:100%;accent-color:var(--a)}label.f{display:block;margin:10px 0 2px;font-size:13px;color:var(--mu)}label.f b{color:var(--tx)}
+.dotA,.dotB{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--a);margin-right:6px}.dotB{background:var(--b)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}.g3{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+.ch{background:var(--sf2);border-radius:8px;padding:8px 10px}.ch span{display:block;font-size:12px;color:var(--mu)}.ch b{font-size:26px;font-weight:700}
+.vd{display:flex;gap:16px;align-items:center;flex-wrap:wrap}.vd .num{font-size:40px;line-height:1}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chip{font-size:12px;border:1px solid var(--bd);border-radius:99px;padding:2px 10px;background:none;cursor:pointer;color:var(--mu)}.chip.on{color:var(--tx);border-color:var(--a)}
+.tw{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--bd)}th:first-child,td:first-child{text-align:left}
+td.win{color:var(--ok);font-weight:600}td.lose{color:var(--no)}ul{padding-left:18px;margin:8px 0 0}li{margin:4px 0}
+#modal{display:none;position:fixed;inset:0;background:#000a;z-index:20;padding:16px;overflow:auto}#modal .card{max-width:520px;margin:20px auto}textarea{width:100%;background:var(--sf2);border:1px solid var(--bd);color:var(--tx);border-radius:8px;padding:8px}
+</style></head><body>
+<header><h1>OmniAthlete IQ</h1><span class="mu">Pick a sport, choose two players, set the match. You get a clear start/bench verdict. Players marked ● Live use real stats loaded by Claude; others use role-based estimates.</span>
+<div class="row" id="tabs"></div><div class="row" id="fmt"></div></header>
+<main class="wrap"><section id="ctl"></section><section id="out"></section></main><div id="modal"></div>
+<script>
+const $=s=>document.querySelector(s),clamp=(x,a,b)=>Math.max(a,Math.min(b,x)),avg=a=>a.reduce((s,x)=>s+x,0)/a.length;
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const rng=s=>()=>((s=(s*1664525+1013904223)>>>0)/4294967296),seedOf=s=>{let h=7;for(const c of s)h=(h*31+c.charCodeAt(0))>>>0;return h};
+const pois=(l,r)=>{const L=Math.exp(-l);let k=0,p=1;do{k++;p*=r()}while(p>L&&k<40);return k-1};
+const ewma=(a,al=.35)=>a.reduce((e,x,i)=>i?al*x+(1-al)*e:x,a[0]),pct=(s,p)=>[...s].sort((x,y)=>x-y)[Math.floor(p*(s.length-1))],N=800;
+/* ---------- presets & roster ---------- */
+const FP={ST:{n:'Striker',m:82,xg:.62,xa:.1,kp:1,df:1.2,sv:0,h:.97,cs:0},W:{n:'Winger',m:80,xg:.3,xa:.25,kp:2.2,df:2.5,sv:0,h:.94,cs:0},AM:{n:'Attacking midfielder',m:78,xg:.25,xa:.28,kp:2.6,df:2,sv:0,h:.95,cs:.3},CM:{n:'Box-to-box midfielder',m:84,xg:.12,xa:.14,kp:1.6,df:4.8,sv:0,h:.97,cs:1},FB:{n:'Full-back',m:84,xg:.05,xa:.12,kp:1.5,df:5.5,sv:0,h:.95,cs:3},CB:{n:'Centre-back',m:88,xg:.04,xa:.02,kp:.4,df:6.5,sv:0,h:1,cs:4},GK:{n:'Goalkeeper',m:90,xg:0,xa:0,kp:0,df:0,sv:3.2,h:1,cs:4}};
+const CP={OP:{n:'Opener',balls:28,sr:140,avg:30,ov:0,bsr:0,eco:0,ph:[.8,.2,0]},TO:{n:'Top-order (3-4)',balls:26,sr:135,avg:32,ov:0,bsr:0,eco:0,ph:[.3,.6,.1]},FI:{n:'Death-overs finisher',balls:14,sr:160,avg:22,ov:0,bsr:0,eco:0,ph:[0,.2,.8]},AR:{n:'All-rounder',balls:16,sr:138,avg:22,ov:.75,bsr:24,eco:8,ph:[0,.4,.6]},PB:{n:'Pace bowler',balls:5,sr:105,avg:8,ov:1,bsr:18,eco:7.8,ph:[0,.5,.5],k:'pace'},SB:{n:'Spin bowler',balls:5,sr:100,avg:8,ov:1,bsr:21,eco:7.2,ph:[0,.5,.5],k:'spin'}};
+const fb=(n,t,g,r,o={})=>{const q=FP[r],m=o.m||q.m;return{id:n,n,t,s:'F',g,r,xg:q.xg,xa:q.xa,kp:q.kp,df:q.df,sv:q.sv,form:1,m,mins:[m,m,m-3,m,m-5].map(x=>Math.min(90,x)),...o}};
+const cr=(n,t,g,r,o={})=>{const q=CP[r],p={id:n,n,t,s:'C',g,r,balls:q.balls,sr:q.sr,avg:q.avg,ov:q.ov,bsr:q.bsr,eco:q.eco,vsP:1,vsS:1,k:q.k||'pace',...o};p.rsr=o.rsr||p.sr;p.runs=o.runs||Array(8).fill(p.avg);return p};
+const ROSTER=[fb('Erling Haaland','Man City','M','ST',{xg:.95,xa:.1,kp:.9,mins:[88,90,85,90,87]}),fb('Bukayo Saka','Arsenal','M','W',{xg:.35,xa:.3,kp:2.4,mins:[84,90,78,86,80]}),fb('Rodri','Man City','M','CM',{xg:.1,xa:.1,kp:1.4,df:5.5,mins:[85,90,90,88,90]}),
+fb('Sam Kerr','Chelsea','W','ST',{xg:.7,xa:.12,kp:1.1,mins:[85,80,90,82,84]}),fb('Aitana Bonmatí','Barcelona','W','AM',{xg:.3,xa:.3,kp:2.6,df:2.2,mins:[78,80,85,82,76]}),fb('Alessia Russo','Arsenal','W','ST',{xg:.5,xa:.15,kp:1,mins:[80,84,78,85,82]}),
+cr('Virat Kohli','RCB / India','M','TO',{balls:30,sr:137,rsr:140,avg:41,runs:[52,18,71,34,9,63,45,82],vsP:.95,vsS:1.05}),cr('Travis Head','SRH / Australia','M','OP',{balls:24,sr:165,rsr:170,avg:34,runs:[68,12,44,90,5,31,56,22],vsP:.95,vsS:1.1}),cr('Jasprit Bumrah','MI / India','M','PB',{bsr:14.5,eco:6.8,balls:3}),
+cr('Smriti Mandhana','RCB-W / India','W','OP',{balls:27,sr:128,rsr:132,avg:32,runs:[44,61,12,38,70,9,33,52],vsP:1.05,vsS:.95}),cr('Sophie Ecclestone','UP Warriorz / England','W','SB',{bsr:19,eco:6.3}),cr('Ellyse Perry','RCB-W / Australia','W','AR',{balls:22,sr:125,avg:28,bsr:22,eco:7})];
+/* ---------- engines ---------- */
+const FMT={T20:{b:1,s:1,ov:4,w:1,e:1,ref:8.2,refSR:135,c:90},ODI:{b:2.1,s:.72,ov:10,w:1.35,e:.68,ref:5.6,refSR:98,c:130},Test:{b:3.4,s:.42,ov:18,w:2.4,e:.4,ref:3.2,refSR:57,c:150}};
+const PI={Flat:{sr:.15,b:1.1,e:1.12},Balanced:{sr:0,b:1,e:1},Seaming:{sr:-.12,b:.9,e:.93},Turning:{sr:-.18,b:.88,e:.95}},GR={Small:{sr:.08,e:1.06},Medium:{sr:0,e:1},Large:{sr:-.04,e:.95}};
+const WK={pace:{Flat:.85,Balanced:1,Seaming:1.25,Turning:.9},spin:{Flat:.9,Balanced:1,Seaming:.9,Turning:1.35}},AX=['Form','Time security','Matchup','Ceiling','Efficiency','Venue'];
+function calculateFootballProjections(p,c,fit){
+ const R=FP[p.r],base=ewma(p.mins),rest=c.rest>=6?1:c.rest>=4?.96:.88,fm={full:1,prob:.7,doubt:.4}[fit];
+ const mn=Math.min(90,base*rest*fm*R.h),f=mn/90,home=+c.home,chase=+c.chase,odr=[0,1.25,1.12,1,.88,.75][c.tier],ven=home?1.12:.92,st=chase?1.08:.95,ps=Math.sqrt(c.poss/50),adj=odr*ven*st*ps,def=(100-c.poss)/50;
+ const lg=p.xg*f*adj,la=p.xa*f*adj,kp=p.kp*f*adj,cs=Math.exp(-1.3*def*(chase?1.1:.9)*(home?.92:1.1)),tk=p.df*f*def,sv=p.sv*f*def;
+ const oth=kp*.3+tk*.5+sv*.6+R.cs*cs*clamp(mn/60,0,1)+f*2,pts=lg*5+la*3+oth,r=rng(seedOf(p.id+'F')),sims=[];
+ for(let i=0;i<N;i++){const k=.8+.4*r();sims.push(pois(lg*k,r)*5+pois(la*k,r)*3+oth*(.7+.6*r()))}
+ const q={p10:pct(sims,.1),p50:pct(sims,.5),p90:pct(sims,.9)},e=Math.exp(-lg);
+ return{pts,sims,q,note:`Base minutes (EWMA) ${base.toFixed(0)} × rest ${rest} × fitness ${fm} × sub-hazard ${R.h}`,
+ radar:{Form:(p.form-.7)/.6*100,'Time security':mn/90*100,Matchup:(odr-.75)/.5*100,Ceiling:q.p90/16*100,Efficiency:Math.max((p.xg+p.xa)/.8,p.df/8,p.sv/4)*100,Venue:(ven*st*ps-.7)/.6*100},
+ rows:[['Projected minutes',mn,0],['Expected goals this match',lg,2],['P(≥1 goal) %',(1-e)*100,0],['P(≥2 goals) %',(1-e-lg*e)*100,0],['Expected assists',la,2],['Clean-sheet probability %',cs*100,0],['Tackles + interceptions',tk,1],['Projected saves',sv,1],['Impact score',pts,1]]}}
+function calculateCricketProjections(p,c,fmt){
+ const F=FMT[fmt],pi=PI[c.pitch],gr=GR[c.ground],pr=c.pres/100,ph=(CP[p.r]||{ph:[.3,.5,.2]}).ph,w=.6*avg(p.runs.slice(-3))+.4*avg(p.runs.slice(-8,-3));
+ const ff=clamp(w/Math.max(p.avg,1),.7,1.35),mu=c.pace/100*p.vsP+(1-c.pace/100)*p.vsS,inn2=+c.inn2;
+ const balls=p.balls*F.b*pi.b*ff**.6*(1-.1*pr),sr=(.6*p.sr+.4*p.rsr)*F.s*(1+pi.sr+gr.sr+(inn2?.06:0))*ff**.4*(1+.1*pr)/Math.sqrt(mu);
+ const H=[.03,.022,.05],ED=1-Math.exp(-5*ph.reduce((s,x,i)=>s+x*H[i],0)*mu*(1+.5*pr)/F.b),runs=balls*sr/100*(1-ED),ov=F.ov*p.ov;
+ const wk=ov?ov*6/(p.bsr*F.w)*[0,.85,.93,1,1.1,1.2][c.opp]*WK[p.k][c.pitch]:0,eco=ov?p.eco*F.e*pi.e*gr.e*(inn2?1.05:1):0;
+ const bw=k=>ov?ov*(F.ref-eco)*1.5*k:0,mult=1+.25*(sr/F.refSR-1),pts=runs*mult+wk*25+bw(1),r=rng(seedOf(p.id+'C')),sims=[];
+ for(let i=0;i<N;i++){const B=-balls*Math.log(1-r());sims.push(B*sr/100*(.8+.4*r())*(1-ED)*mult+pois(wk,r)*25+bw(.7+.6*r()))}
+ const q={p10:pct(sims,.1),p50:pct(sims,.5),p90:pct(sims,.9)};
+ return{pts,sims,q,note:`Form factor ${ff.toFixed(2)} (60% last 3 / 40% prior 5 innings) · matchup threat ${mu.toFixed(2)}`,
+ radar:{Form:(ff-.7)/.65*100,'Time security':(balls+ov*6)/(25*F.b+F.ov*3)*100,Matchup:(1.25-mu)/.5*100,Ceiling:q.p90/F.c*100,Efficiency:((sr/F.refSR)*.6+(ov?F.ref/eco:1)*.4)*60,Venue:(1+pi.sr+gr.sr+(inn2?.06:0)-.8)/.5*100},
+ rows:[['Projected balls faced',balls,0],['Projected strike rate',sr,0],['Chance of early dismissal %',ED*100,0,1],['Projected runs',runs,1],['Projected overs',ov,1],['Expected wickets',wk,2],['Economy rate',eco,2,1],['Impact score',pts,1]]}}
+function evaluateHeadToHead(A,B,a,b){
+ let w=0;for(let i=0;i<N;i++)w+=a.sims[i]>b.sims[i]?1:a.sims[i]<b.sims[i]?0:.5;
+ const wp=w/N,conf=Math.round(Math.abs(wp-.5)*200),side=conf<12?'T':wp>.5?'A':'B',nm=side==='A'?A.n:B.n;
+ const c=[];a.rows.forEach((x,i)=>{const y=b.rows[i];if(x[0]==='Impact score'||x[1]<.01||y[1]<.01)return;const d=x[1]-y[1],rel=Math.abs(d)/((x[1]+y[1])/2);if(rel<.03)return;
+  const wA=x[3]?d<0:d>0,win=wA?A:B,lose=wA?B:A,wv=wA?x[1]:y[1],lv=wA?y[1]:x[1];
+  c.push([rel*(/minutes|balls/.test(x[0])?1.3:1),`${win.n} ${x[3]?'has the safer':'projects a higher'} ${x[0].toLowerCase()}: ${wv.toFixed(x[2])} vs ${lv.toFixed(x[2])} for ${lose.n}.`])});
+ c.sort((x,y)=>y[0]-x[0]);
+ return{wp,conf,side,label:side==='T'?'TOSS-UP (SITUATION DEPENDENT)':'START '+nm.toUpperCase(),delta:a.pts-b.pts,why:c.slice(0,3).map(x=>x[1])}}
+/* ---------- state ---------- */
+const load=()=>{try{return JSON.parse(localStorage.getItem('oaiq')||'[]')}catch(e){return[]}};
+const S={sport:'F',g:'M',fmt:'T20',A:null,B:null,tab:'A',fit:{A:'full',B:'full'},axes:Object.fromEntries(AX.map(k=>[k,1])),custom:load(),
+ ctx:{F:{home:1,tier:3,chase:0,poss:50,rest:5},C:{pitch:'Balanced',ground:'Medium',inn2:0,pres:30,pace:50,opp:3}}};
+let LAST=null;const ctx=()=>S.ctx[S.sport],LIVE={},pool=()=>ROSTER.map(p=>LIVE[p.id]||p).concat(Object.values(LIVE).filter(p=>!ROSTER.some(r=>r.id===p.id)),S.custom).filter(p=>p.s===S.sport&&p.g===S.g);
+function setTab(s,g){S.sport=s;S.g=g;const col=g==='W'?['#a78bfa','#fb7185']:s==='F'?['#34d399','#38bdf8']:['#fbbf24','#38bdf8'];
+ document.documentElement.style.setProperty('--a',col[0]);document.documentElement.style.setProperty('--b',col[1]);
+ const p=pool();S.A=p[0]&&p[0].id;S.B=p[1]&&p[1].id;renderTabs();renderCtl();update()}
+function renderTabs(){$('#tabs').innerHTML='<span class="mu" style="align-self:center">1. Sport:</span>'+[['C','M','Cricket (Men)'],['C','W','Cricket (Women)'],['F','M','Football (Men)'],['F','W','Football (Women)']].map(([s,g,l])=>`<button class="tab ${S.sport===s&&S.g===g?'on':''}" onclick="setTab('${s}','${g}')">${l}</button>`).join('');
+ $('#fmt').innerHTML=S.sport==='C'?'<span class="mu" style="align-self:center">Format:</span>'+Object.keys(FMT).map(f=>`<button class="tab ${S.fmt===f?'on':''}" onclick="S.fmt='${f}';renderTabs();update()">${f==='T20'?'T20 / Franchise':f}</button>`).join(''):''}
+function setC(k,v){ctx()[k]=v;const e=$('#v_'+k);if(e)e.textContent=v;update()}
+function pick(slot,v){const p=pool().find(x=>x.n.toLowerCase()===v.trim().toLowerCase());if(p){S[slot]=p.id;update()}else if(v.trim())openModal(v.trim(),slot)}
+function renderCtl(){const c=ctx(),sl=(k,l,mn,mx)=>`<label class="f">${l}: <b id="v_${k}">${c[k]}</b><input type="range" min="${mn}" max="${mx}" value="${c[k]}" oninput="setC('${k}',+this.value)"></label>`,
+ sel=(k,l,o)=>`<label class="f">${l}<select onchange="setC('${k}',this.value)">${o.map(([v,t])=>`<option value="${v}" ${c[k]==v?'selected':''}>${t}</option>`).join('')}</select></label>`;
+ const slot=X=>{const p=pool().find(x=>x.id===S[X]);return`<div class="card"><h2><span class="dot${X}"></span>2. Player ${X}</h2><input type="text" list="dl" value="${esc(p?p.n:'')}" placeholder="Type any player name" onchange="pick('${X}',this.value)" aria-label="Player ${X}"><div class="mu" id="sum${X}"></div>${S.sport==='F'?`<label class="f">Fitness<select onchange="S.fit.${X}=this.value;update()"><option value="full">Full fitness (1.0)</option><option value="prob">Probable / returning (0.7)</option><option value="doubt">Doubtful (0.4)</option></select></label>`:''}</div>`};
+ $('#ctl').innerHTML=`<datalist id="dl">${pool().map(p=>`<option value="${esc(p.n)}">`).join('')}</datalist>${slot('A')}${slot('B')}<button class="btn" style="width:100%;margin-bottom:16px" onclick="openModal('')">+ Add custom player</button><div class="card"><h2>Live data</h2><p class="mu">${liveInfo()}</p></div>
+ <div class="card"><h2>3. Set up the match</h2><p class="mu">Move any slider and the verdict updates instantly.</p>${S.sport==='F'?sel('home','Venue',[[1,'Home (+12%)'],[0,'Away (−8%)']])+sl('tier','Opponent defensive tier (1 weak – 5 elite)',1,5)+sel('chase','Game state',[[0,'Leading'],[1,'Chasing']])+sl('poss','Expected team possession %',30,70)+sl('rest','Rest days',2,7)
+ :sel('pitch','Pitch',[['Flat','Flat batting paradise'],['Balanced','Balanced'],['Seaming','Green seamer'],['Turning','Rank turner']])+sel('ground','Ground size',[['Small','Short boundaries'],['Medium','Medium'],['Large','Large']])+sel('inn2','Innings',[[0,'Batting first'],[1,'Chasing (night, dew)']])+sl('pres','Target pressure',0,100)+sl('pace','Opposition pace share %',0,100)+sl('opp','Opposition batting vulnerability (1–5)',1,5)}</div>`}
+/* ---------- charts ---------- */
+function radar(a,b,ax){const cx=160,cy=150,n=ax.length,pt=(i,v)=>{const t=-Math.PI/2+i*2*Math.PI/n;return[cx+v*Math.cos(t),cy+v*Math.sin(t)]},ring=v=>`<polygon points="${ax.map((k,i)=>pt(i,v).join(',')).join(' ')}" fill="none" stroke="var(--bd)"/>`,
+ poly=(r,col)=>`<polygon points="${ax.map((k,i)=>pt(i,clamp(r[k],4,100)).join(',')).join(' ')}" fill="${col}" fill-opacity=".22" stroke="${col}" stroke-width="2"/>`;
+ return`<svg viewBox="0 0 320 300" width="100%" role="img" aria-label="Radar comparison">${[25,50,75,100].map(ring).join('')}${ax.map((k,i)=>{const[x,y]=pt(i,100),[lx,ly]=pt(i,122);return`<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--bd)"/><text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="var(--mu)">${k}</text>`}).join('')}${poly(a.radar,'var(--a)')}${poly(b.radar,'var(--b)')}</svg>`}
+function bars(a,b){const L=['Floor (P10)','Median','Ceiling (P90)'],va=[a.q.p10,a.q.p50,a.q.p90],vb=[b.q.p10,b.q.p50,b.q.p90],mx=Math.max(...va,...vb,1);let s='';
+ L.forEach((l,i)=>{const x=22+i*100;[va[i],vb[i]].forEach((v,j)=>{const h=Math.max(0,v)/mx*130,X=x+j*34;s+=`<rect x="${X}" y="${165-h}" width="30" height="${h}" rx="3" fill="var(--${j?'b':'a'})"/><text x="${X+15}" y="${160-h}" text-anchor="middle" font-size="11" fill="var(--tx)">${v.toFixed(1)}</text>`});s+=`<text x="${x+32}" y="187" text-anchor="middle" font-size="11" fill="var(--mu)">${l}</text>`});
+ return`<svg viewBox="0 0 320 195" width="100%" role="img" aria-label="Floor, median and ceiling scores">${s}</svg>`}
+/* ---------- output ---------- */
+function update(){const P=pool(),A=P.find(p=>p.id===S.A),B=P.find(p=>p.id===S.B),o=$('#out');
+ if(!A||!B){o.innerHTML='<div class="card">Pick two players to compare, or add a custom player.</div>';return}
+ const c=ctx(),run=(p,X)=>S.sport==='F'?calculateFootballProjections(p,c,S.fit[X]):calculateCricketProjections(p,c,S.fmt),a=run(A,'A'),b=run(B,'B'),h=evaluateHeadToHead(A,B,a,b);LAST={A,B,a,b,h,c};
+ [['A',A],['B',B]].forEach(([X,p])=>{const e=$('#sum'+X);if(e)e.innerHTML=`${esc(p.t)} · ${(FP[p.r]||CP[p.r]).n}<br>`+(p.live?`<span style="color:var(--ok)" title="${esc(p.src||'')}">● Live data · updated ${esc(p.asOf)}</span>`:`<span>○ ${/Claude/.test(p.src||'')?'AI estimate, not live':'Estimated baseline'}. Use “Add custom player” → “Request live web lookup” for real stats.</span>`)});
+ const col=h.side==='A'?'var(--a)':h.side==='B'?'var(--b)':'var(--mu)',ax=AX.filter(k=>S.axes[k]),T=S.tab==='A'?[A,a]:[B,b];
+ const rs=a.rows.map((x,i)=>[x,b.rows[i]]).filter(([x,y])=>x[1]>.001||y[1]>.001);
+ const tbl=rs.map(([x,y])=>{const d=x[1]-y[1],neu=Math.abs(d)<.005||(x[3]&&(!x[1]||!y[1])),aw=!neu&&(x[3]?d<0:d>0),bw=!neu&&!aw;return`<tr><td>${x[0]}</td><td class="${aw?'win':bw?'lose':''}">${x[1].toFixed(x[2])}</td><td class="${bw?'win':aw?'lose':''}">${y[1].toFixed(x[2])}</td><td>${d>0?'+':''}${d.toFixed(x[2])}</td></tr>`}).join('');
+ o.innerHTML=`<div class="card"><div class="vd"><svg width="92" height="92" viewBox="0 0 92 92" role="img" aria-label="Confidence ${h.conf}%"><circle cx="46" cy="46" r="38" fill="none" stroke="var(--bd)" stroke-width="8"/><circle cx="46" cy="46" r="38" fill="none" stroke="${col}" stroke-width="8" stroke-linecap="round" stroke-dasharray="${2.388*h.conf} 239" transform="rotate(-90 46 46)"/><text x="46" y="51" text-anchor="middle" font-size="20" font-weight="700" fill="var(--tx)">${h.conf}%</text></svg>
+ <div style="flex:1;min-width:200px"><div class="mu">AI scout verdict · confidence ${h.conf}% · ${esc(A.n)} wins ${(h.wp*100).toFixed(0)}% of 800 simulated matches</div><div class="num" style="color:${col}">${esc(h.label)}</div><div class="mu">Impact score ${a.pts.toFixed(1)} vs ${b.pts.toFixed(1)} (Δ ${h.delta>0?'+':''}${h.delta.toFixed(1)} for ${esc(A.n)})</div></div></div>
+ <p style="margin:10px 0 0">${plain(h,A,B)}</p><ul>${h.why.map(x=>`<li>${esc(x)}</li>`).join('')||'<li>The two projections are almost identical in every tracked metric.</li>'}</ul><details class="mu" style="margin-top:10px"><summary>How to read this</summary><p>Impact score is the overall expected contribution in this match: higher is better. Floor, median and ceiling are the bad-day, typical-day and great-day outcomes (10th, 50th and 90th percentile). Confidence shows how often the better player wins across 800 simulated matches; below 12% we call it a toss-up. Green numbers in the table mark the better player on each metric.</p></details></div>
+ <div class="card"><div class="row" style="margin:0 0 10px"><button class="tab ${S.tab==='A'?'on':''}" onclick="S.tab='A';update()">${esc(A.n)}</button><button class="tab ${S.tab==='B'?'on':''}" onclick="S.tab='B';update()">${esc(B.n)}</button></div>
+ <div class="g3">${T[1].rows.filter(x=>x[1]>.001).map(x=>`<div class="ch"><span>${x[0]}</span><b class="num">${x[1].toFixed(x[2])}</b></div>`).join('')}</div><p class="mu">${T[1].note}. Range of outcomes — floor ${T[1].q.p10.toFixed(1)} · median ${T[1].q.p50.toFixed(1)} · ceiling ${T[1].q.p90.toFixed(1)}.</p></div>
+ <div class="g2" style="gap:16px"><div class="card"><h2>Radar</h2><div class="chips">${AX.map(k=>`<button class="chip ${S.axes[k]?'on':''}" onclick="togAx('${k}')">${k}</button>`).join('')}</div>${ax.length>=3?radar(a,b,ax):'<p class="mu">Keep at least three metrics.</p>'}</div><div class="card"><h2>Floor, median, ceiling</h2>${bars(a,b)}<div class="mu"><span class="dotA"></span>${esc(A.n)} <span class="dotB" style="margin-left:10px"></span>${esc(B.n)}</div></div></div>
+ <div class="card"><h2>Metric breakdown</h2><div class="tw"><table><tr><th>Metric</th><th>${esc(A.n)}</th><th>${esc(B.n)}</th><th>Δ</th></tr>${tbl}</table></div></div>
+ <div class="card"><button class="btn" onclick="cp(report())">Copy scouting report</button> <button class="btn" onclick="cp(JSON.stringify(exp(),null,2))">Copy JSON</button> <span class="mu" id="msg"></span><div id="fb"></div></div>`}
+function togAx(k){S.axes[k]=S.axes[k]?0:1;update()}
+function plain(h,A,B){if(h.side==='T')return`Too close to call: ${esc(A.n)} and ${esc(B.n)} are level in most simulated matches, so decide on lineup needs, matchup and rest.`;const w=h.side==='A'?A:B,l=h.side==='A'?B:A,s=h.conf>=60?'clear':h.conf>=30?'moderate':'slight';return`Pick ${esc(w.n)} over ${esc(l.n)}: a ${s} edge in these match conditions, ahead in ${((h.side==='A'?h.wp:1-h.wp)*100).toFixed(0)}% of simulated matches.`}
+function liveInfo(){const n=Object.keys(LIVE).length;return (n?`${n} player${n>1?'s are':' is'} loaded with real stats. `:'No live players are loaded yet. ')+'To add someone: type their name (or use + Add custom player), request a live lookup, then tell Claude “process the player requests”.'}
+function report(){const{A,B,a,b,h}=LAST;return`OmniAthlete IQ scouting report (${S.sport==='F'?'Football':'Cricket '+S.fmt}, ${S.g==='M'?'Men':'Women'})\n${A.n} vs ${B.n}\nVerdict: ${h.label} (confidence ${h.conf}%)\nImpact: ${a.pts.toFixed(1)} vs ${b.pts.toFixed(1)}\nRange (P10/P50/P90): ${a.q.p10.toFixed(1)}/${a.q.p50.toFixed(1)}/${a.q.p90.toFixed(1)} vs ${b.q.p10.toFixed(1)}/${b.q.p50.toFixed(1)}/${b.q.p90.toFixed(1)}\n`+h.why.map(x=>'- '+x).join('\n')}
+function exp(){const{A,B,a,b,h,c}=LAST,m=(p,r)=>({player:p.n,team:p.t,role:p.r,impact:+r.pts.toFixed(2),floor:+r.q.p10.toFixed(2),median:+r.q.p50.toFixed(2),ceiling:+r.q.p90.toFixed(2),metrics:Object.fromEntries(r.rows.map(x=>[x[0],+x[1].toFixed(3)]))});return{sport:S.sport,gender:S.g,format:S.fmt,context:c,A:m(A,a),B:m(B,b),verdict:{label:h.label,confidence:h.conf,winProbabilityA:+h.wp.toFixed(3),reasons:h.why}}}
+async function cp(t){try{await navigator.clipboard.writeText(t);$('#msg').textContent='Copied';$('#fb').innerHTML=''}catch(e){$('#fb').innerHTML=`<textarea readonly rows="8" onfocus="this.select()">${esc(t)}</textarea>`}}
+/* ---------- custom player modal ---------- */
+const FF=[['m','Avg minutes'],['xg','xG / 90'],['xa','xA / 90'],['kp','Key passes / 90'],['df','Tackles + int. / 90'],['sv','Saves / 90'],['form','Form (0.7–1.3)']],CF=[['balls','Avg balls faced'],['sr','Strike rate'],['avg','Batting average'],['ov','Bowling share (0–1)'],['bsr','Balls per wicket'],['eco','Economy'],['vsP','Pace weakness (1 = neutral)'],['vsS','Spin weakness (1 = neutral)']];
+function fill(){const q=(S.sport==='F'?FP:CP)[$('#m_r').value];(S.sport==='F'?FF:CF).forEach(([k])=>{$('#m_'+k).value=k in q?q[k]:1})}
+function openModal(name,slot){const T=S.sport==='F'?FP:CP,F=S.sport==='F'?FF:CF;
+ $('#modal').innerHTML=`<div class="card"><h2>Add custom player</h2><label class="f">Player name<input type="text" id="m_n" value="${esc(name)}"></label><label class="f">Team / club<input type="text" id="m_t"></label>
+ <label class="f">Sport and gender<input type="text" disabled value="${S.sport==='F'?'Football':'Cricket'} (${S.g==='M'?'Men':'Women'}), set by the active tab"></label>
+ <label class="f">Primary role<select id="m_r" onchange="fill()">${Object.entries(T).map(([k,v])=>`<option value="${k}">${v.n}</option>`).join('')}</select></label><p class="mu">Enter name, team and role, then get stats. Edit any number below.</p><div class="row" style="margin:0 0 8px"><button class="btn" onclick="aiFill()">Auto-fill with Claude</button><button class="btn" onclick="reqLookup('${slot||'A'}')">Request live web lookup</button></div><div class="mu" id="m_s"></div>
+ <div class="g2">${F.map(([k,l])=>`<label class="f">${l}<input type="number" step="any" id="m_${k}"></label>`).join('')}</div>
+ <div class="row"><button class="btn" onclick="savePlayer('${slot||'A'}')">Save player</button><button class="btn" onclick="$('#modal').style.display='none'">Cancel</button></div></div>`;$('#modal').style.display='block';AIF=0;fill()}
+let AIF=0;
+async function aiFill(){const st=$('#m_s'),n=$('#m_n').value.trim();if(!n){st.textContent='Enter a player name first.';return}
+ st.textContent='Asking Claude…';try{const sm=await claude.use('sample');if(!sm){st.textContent='Auto-fill isn’t available in this view.';return}
+ const F=S.sport==='F'?FF:CF,keys=F.map(([k,l])=>k+' ('+l+')').join(', ');
+ const o=await sm.json(`Player: ${n}. Team: ${$('#m_t').value||'unknown'}. Sport: ${S.sport==='F'?'football':'cricket (T20 format)'}, ${S.g==='M'?'men':'women'}. Role: ${(S.sport==='F'?FP:CP)[$('#m_r').value].n}. Using only your own knowledge (you cannot browse), give this player's typical recent numbers for these fields: ${keys}. Football per-90 values must be realistic (xG per 90 is rarely above 1). Reply with only a JSON object using exactly these keys with numeric values, plus "known": true if you recognise the player or false if you are guessing.`,{modelTier:'quick'});
+ if(!o||o.known===false){st.textContent='Claude doesn’t recognise this player, so role defaults are kept. Try “Request live web lookup”.';return}
+ F.forEach(([k])=>{if(typeof o[k]==='number')$('#m_'+k).value=o[k]});AIF=1;st.textContent='Filled from Claude’s memory, which may be out of date. Check the numbers, then save.'}catch(e){st.textContent='Auto-fill failed ('+(e&&e.code||'error')+'). Try again or request a live lookup.'}}
+async function reqLookup(slot){const st=$('#m_s'),n=$('#m_n').value.trim();if(!n){st.textContent='Enter a player name first.';return}
+ try{const db=await claude.use('db');if(!db){st.textContent='Requests can’t be saved in this view.';return}
+ await db.collection('requests').add({name:n,team:$('#m_t').value,role:$('#m_r').value,sport:S.sport,gender:S.g,fmt:S.fmt,at:new Date().toISOString(),status:'open'});
+ st.textContent='Request saved. Message Claude in chat: “process the player requests”. It will search the web and load real stats here.'}catch(e){st.textContent='Couldn’t save the request ('+(e&&e.code||'error')+'). Only the owner and editors can send requests.'}}
+function savePlayer(slot){const n=$('#m_n').value.trim();if(!n){$('#m_n').focus();return}const r=$('#m_r').value,v={};(S.sport==='F'?FF:CF).forEach(([k])=>v[k]=+$('#m_'+k).value||0);
+ let p;if(S.sport==='F'){p=fb(n,$('#m_t').value||'Custom','' + S.g,r,{xg:v.xg,xa:v.xa,kp:v.kp,df:v.df,sv:v.sv,form:v.form||1,m:v.m||80});p.mins=[v.m,v.m,v.m-3,v.m,v.m-5].map(x=>clamp(x,0,90))}
+ else p=cr(n,$('#m_t').value||'Custom',S.g,r,{balls:v.balls,sr:v.sr,avg:v.avg,ov:v.ov,bsr:v.bsr||20,eco:v.eco,vsP:v.vsP||1,vsS:v.vsS||1});
+ p.id='c'+Date.now();p.src=AIF?'Auto-filled by Claude from its own knowledge (may be out of date)':'Role preset or manual entry';p.s=S.sport;p.g=S.g;S.custom.push(p);try{localStorage.setItem('oaiq',JSON.stringify(S.custom))}catch(e){}
+ S[slot]=p.id;$('#modal').style.display='none';renderCtl();update()}
+setTab('F','M');
+let LK='';(async()=>{try{if(!window.claude)return;const db=await claude.use('db');if(!db)return;db.collection('players').onSnapshot(sn=>{const ps=sn.docs.map(d=>d.data()).filter(p=>p&&p.id),k=JSON.stringify(ps);if(k===LK)return;LK=k;ps.forEach(p=>LIVE[p.id]=p);renderCtl();update()},()=>{})}catch(e){}})();
+</script></body></html>
